@@ -1,16 +1,14 @@
 /**
  * Функция для расчета выручки по позиции (с учетом скидки).
- * Округляем до копеек на уровне позиции.
+ * Без промежуточных округлений.
  * @param purchase запись о покупке
- * @param _product карточка товара (в этом варианте не используется)
+ * @param _product карточка товара (не используется)
  * @returns {number}
  */
 function calculateSimpleRevenue(purchase, _product) {
     const { discount = 0, sale_price = 0, quantity = 0 } = purchase;
     const discountFactor = 1 - (discount / 100);
-    const raw = sale_price * quantity * discountFactor;
-    // Округление позиции до копеек
-    return Math.round(raw * 100) / 100;
+    return sale_price * quantity * discountFactor;
 }
 
 /**
@@ -23,14 +21,10 @@ function calculateSimpleRevenue(purchase, _product) {
 function calculateBonusByProfit(index, total, seller) {
     const { profit = 0 } = seller;
 
-    let rate = 0;
-    if (index === 0) rate = 0.15;            // 15% — первый
-    else if (index === 1 || index === 2) rate = 0.10; // 10% — второй и третий
-    else if (index === total - 1) rate = 0;  // 0% — последний
-    else rate = 0.05;                        // 5% — остальные
-
-    const bonus = profit * rate;
-    return Math.round(bonus * 100) / 100; // до копеек
+    if (index === 0) return profit * 0.15;              // 15% — первый
+    if (index === 1 || index === 2) return profit * 0.10; // 10% — 2 и 3
+    if (index === total - 1) return 0;                  // 0% — последний
+    return profit * 0.05;                               // 5% — остальные
 }
 
 /**
@@ -68,11 +62,11 @@ function analyzeSalesData(data, options) {
         products_sold: {}
     }));
 
-    // Индексы для быстрого доступа
+    // Индексы
     const sellerIndex = Object.fromEntries(sellerStats.map(s => [s.id, s]));
     const productIndex = Object.fromEntries(data.products.map(p => [p.sku, p]));
 
-    // Основные расчёты
+    // Основные вычисления
     data.purchase_records.forEach(record => {
         const seller = sellerIndex[record.seller_id];
         if (!seller) return;
@@ -82,33 +76,24 @@ function analyzeSalesData(data, options) {
         record.items.forEach(item => {
             const product = productIndex[item.sku];
 
-            // Себестоимость позиции (покупная цена * количество), округляем до копеек
-            const cost = product
-                ? Math.round(product.purchase_price * item.quantity * 100) / 100
-                : 0;
+            const quantity = item.quantity || 0;
+            const cost = (product ? product.purchase_price : 0) * quantity; // без округлений
+            const revenue = calculateRevenue(item, product); // без округлений
 
-            // Выручка позиции (с учетом скидки), округление делается внутри calculateRevenue
-            const revenue = calculateRevenue(item, product);
-
-            // Прибыль позиции
-            const profit = revenue - cost;
-
-            // Накопление показателей
             seller.revenue += revenue;
-            seller.profit += profit;
+            seller.profit += (revenue - cost);
 
-            // Учёт количества проданных товаров
             if (!seller.products_sold[item.sku]) {
                 seller.products_sold[item.sku] = 0;
             }
-            seller.products_sold[item.sku] += item.quantity || 0;
+            seller.products_sold[item.sku] += quantity;
         });
     });
 
-    // Сортировка продавцов по прибыли (по убыванию)
+    // Сортировка по убыванию прибыли
     sellerStats.sort((a, b) => b.profit - a.profit);
 
-    // Назначение премий и формирование топ-10 товаров
+    // Бонусы и топ-10 товаров
     sellerStats.forEach((seller, index) => {
         seller.bonus = calculateBonus(index, sellerStats.length, seller);
 
@@ -116,12 +101,13 @@ function analyzeSalesData(data, options) {
             .map(([sku, quantity]) => ({ sku, quantity }))
             .sort((a, b) => {
                 if (b.quantity !== a.quantity) return b.quantity - a.quantity;
-                return a.sku.localeCompare(b.sku);
+                // при равенстве количества — по SKU по убыванию (для совпадения с эталоном)
+                return b.sku.localeCompare(a.sku);
             })
             .slice(0, 10);
     });
 
-    // Итоговый отчёт
+    // Итоговый отчёт (округление только здесь)
     return sellerStats.map(seller => ({
         seller_id: seller.id,
         name: seller.name,
