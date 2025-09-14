@@ -1,3 +1,4 @@
+https://github.com/LentezDEV/sales-bonus
 # Проектная работа "Пряники"
 5 спринт, модуль JS
 
