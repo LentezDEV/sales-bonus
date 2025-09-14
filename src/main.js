@@ -50,15 +50,12 @@ function calculateBonusByProfit(index, total, seller) {
  * @param {Object} options — { calculateRevenue, calculateBonus }
  */
 function analyzeSalesData(data, options) {
-  // 1) Проверяем, что пришли валидные куски данных:
+  // 1) Проверка входных данных
   if (
     !data ||
-    !Array.isArray(data.sellers)   ||
-    data.sellers.length === 0      ||
-    !Array.isArray(data.products)  ||
-    data.products.length === 0     ||
-    !Array.isArray(data.purchase_records) ||
-    data.purchase_records.length === 0    // <–– теперь бросаем и на пустом массиве чеков
+    !Array.isArray(data.sellers)    || data.sellers.length === 0 ||
+    !Array.isArray(data.products)   || data.products.length === 0 ||
+    !Array.isArray(data.purchase_records) || data.purchase_records.length === 0
   ) {
     throw new Error('Некорректные входные данные');
   }
@@ -69,70 +66,65 @@ function analyzeSalesData(data, options) {
   ) {
     throw new Error('Не переданы необходимые функции для расчётов');
   }
-
   const { calculateRevenue, calculateBonus } = options;
 
-  // 2) Подготовка «контейнеров» статистики под каждого продавца
+  // 2) Подготовка контейнеров статистики
   const sellerStats = data.sellers.map(seller => ({
-    id:           seller.id,
-    name:         `${seller.first_name} ${seller.last_name}`,
-    revenue:      0,
-    profit:       0,
-    sales_count:  0,     // сколько чеков
-    products_sold:{},    // { sku: totalQuantity }
-    top_products: [],    // сюда потом заполним топ-3
-    bonus:        0      // сюда потом заполним бонус
+    id:            seller.id,
+    name:          `${seller.first_name} ${seller.last_name}`,
+    revenue:       0,
+    profit:        0,
+    sales_count:   0,
+    products_sold: {},    // { sku: totalQuantity }
+    top_products:  [],    // заполним дальше
+    bonus:         0
   }));
 
-  // 3) Индексы для быстрого доступа
+  // 3) Индексация продавцов и товаров
   const sellerIndex = {};
-  sellerStats.forEach(s => sellerIndex[s.id] = s);
+  sellerStats.forEach(stat => { sellerIndex[stat.id] = stat; });
 
   const productIndex = {};
-  data.products.forEach(p => productIndex[p.sku] = p);
+  data.products.forEach(prod => { productIndex[prod.sku] = prod; });
 
-  // 4) Собираем сырую статистику
+  // 4) Сбор статистики по каждому чеку
   data.purchase_records.forEach(record => {
     const stat = sellerIndex[record.seller_id];
-    if (!stat) return;  // «чужой» продавец, пропускаем
+    if (!stat) return;               // пропускаем чужие записи
 
-    stat.sales_count += 1;  // считаем чеки
+    stat.sales_count += 1;           // считаем чеки
 
+    // выручка из полей total_amount и total_discount
+    const recordRevenue = record.total_amount - (record.total_discount || 0);
+    stat.revenue += recordRevenue;
+
+    // прибыль и учёт проданных единиц по позициям
     record.items.forEach(item => {
       const prod = productIndex[item.sku];
       if (!prod) return;
 
-      // 4.1) выручка по позиции
-      const rev = calculateRevenue(item, prod);
-      stat.revenue += rev;
-
-      // 4.2) прибыль = выручка минус себестоимость
+      const rev  = calculateRevenue(item, prod);
       const cost = prod.purchase_price * item.quantity;
-      stat.profit += rev - cost;
+      stat.profit += (rev - cost);
 
-      // 4.3) учёт общего числа проданных единиц
       stat.products_sold[item.sku] = (stat.products_sold[item.sku] || 0) + item.quantity;
     });
   });
 
-  // 5) Сортируем продавцов по прибыли «по-убыванию»
+  // 5) Сортировка продавцов по убыванию прибыли
   sellerStats.sort((a, b) => b.profit - a.profit);
 
-  // 6) Теперь, когда у нас есть ранжирование, заполним топ-3 товаров и бонусы
+  // 6) Формирование топ-товаров и расчёт бонуса
   sellerStats.forEach((stat, idx) => {
-    // 6.1) Топ-3 товара
-    const arr = Object
-      .entries(stat.products_sold)           // [ [sku, qty], ... ]
+    stat.top_products = Object
+      .entries(stat.products_sold)
       .map(([sku, quantity]) => ({ sku, quantity }))
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 3);
-    stat.top_products = arr;
+      .sort((a, b) => b.quantity - a.quantity);  // весь список, отсортированный по убыванию
 
-    // 6.2) Бонус
     stat.bonus = calculateBonus(idx, sellerStats.length, stat);
   });
 
-  // 7) Собираем финальный массив в том виде, как это ожидает тест
+  // 7) Итоговый маппинг в формат тестов
   return sellerStats.map(stat => ({
     seller_id:   stat.id,
     name:        stat.name,
