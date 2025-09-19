@@ -20,10 +20,10 @@ function calculateSimpleRevenue(purchase, _product) {
  */
 function calculateBonusByProfit(index, total, seller) {
     // @TODO: Расчет бонуса от позиции в рейтинге
-    const max_bonus = 0.15; //для продавца, который принес максимальную прибыль
-    const high_bonus = 0.1; //2-е и 3-е место
+    const max_bonus = 0.15; 
+    const high_bonus = 0.1; 
     const low_bonus = 0.05; 
-    const min_bonus = 0; //последний продавец
+    const min_bonus = 0; 
     if (index === 0) return seller.profit * max_bonus; //продавец, который оказался на первом(нулевом) месте в массиве
     else if (index === 1 || index === 2) return seller.profit * high_bonus;
     else if (index === total - 1) return seller.profit * min_bonus;
@@ -59,9 +59,6 @@ function analyzeSalesData(data, options) { //основная функция
         }
 
     // @TODO: Подготовка промежуточных данных для сбора статистики
-    //создаем массив объектов, который будет хранить статистику по каждому продавцу
-    //data.sellers - исходный массив, который содержит данные обо всех продавцах
-    //.map() - метод, который создает новый массив, применяя указанную функцию к каждому эл-ту исходного массива; не измен исходн. массив
     const sellerStats = data.sellers.map(seller => ({  //seller => - стрелочн функц, которая будет выполн для каждого эл-та seller в массиве data.sellers
         "id": seller.id, //копирует id продавца изз исходн данных
         "name": seller.first_name + " " + seller.last_name,
@@ -73,7 +70,6 @@ function analyzeSalesData(data, options) { //основная функция
         "bonus": 0
     }))
 
-    //юзаем метод массива map(), чтобы создать новый массив объектов под названием productsStats на основе data.products
     const productsStats = data.products.map(product => ({
         "name": product.name,
         "category": product.category,
@@ -84,13 +80,10 @@ function analyzeSalesData(data, options) { //основная функция
 
     // @TODO: Индексация продавцов и товаров для быстрого доступа
     const sellerIndex = sellerStats.reduce((acc, obj) => ({
-        ...acc, //переменная, которая накапливает результат в новый объект
-        [obj.id]: obj //obj - элемент массива, который обрабатывается
-        //в предыдущей строке код получает id текущего объекта и юзает знач в качестве ключа; obj - значение этого ключа
-        //две строчки выше возвращают новый объект в каждой итерации
+        ...acc,
+        [obj.id]: obj 
     }), {}
     )
-    //ключ - sku, значение - запись из data.products
     const productIndex = productsStats.reduce((acc, obj) => ({
         ...acc,
         [obj.sku]: obj
